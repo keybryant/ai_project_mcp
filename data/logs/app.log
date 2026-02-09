@@ -1,0 +1,9 @@
+2025-06-05 21:57:44 | INFO     | __main__:main:22 - 启动项目管理MCP应用 v1.0.0
+2025-06-05 21:57:44 | INFO     | __main__:main:23 - 环境: development
+2025-06-05 21:57:44 | INFO     | __main__:main:24 - 数据目录: D:\develop\aiCode\aiProject\MCP\data
+2025-06-05 21:57:44 | INFO     | project_mcp.core.mcp_server:initialize:63 - 初始化MCP服务器
+2025-06-05 21:57:44 | INFO     | project_mcp.core.mcp_server:initialize:66 - MCP服务器初始化完成
+2025-06-05 21:57:44 | INFO     | project_mcp.core.mcp_server:run:367 - 启动项目管理MCP服务器 v1.0.0
+2025-06-05 21:57:44 | INFO     | project_mcp.core.mcp_server:run:368 - MCP服务器正在运行...
+2025-06-05 22:13:07 | INFO     | project_mcp.core.mcp_server:run:386 - MCP服务器已关闭
+2025-06-05 22:13:07 | INFO     | __main__:main:36 - 项目管理MCP应用已关闭
