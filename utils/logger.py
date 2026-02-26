@@ -65,49 +65,43 @@ def get_logger(name: str):
     return loguru_logger.bind(name=name)
 
 
-# 便捷的日志记录函数
+# 便捷的日志记录函数（使用 loguru 全局 logger）
 def log_debug(message: str, **kwargs) -> None:
-    """记录调试日志"""
-    logger.debug(message, **kwargs)
+    loguru_logger.debug(message, **kwargs)
 
 
 def log_info(message: str, **kwargs) -> None:
-    """记录信息日志"""
-    logger.info(message, **kwargs)
+    loguru_logger.info(message, **kwargs)
 
 
 def log_warning(message: str, **kwargs) -> None:
-    """记录警告日志"""
-    logger.warning(message, **kwargs)
+    loguru_logger.warning(message, **kwargs)
 
 
 def log_error(message: str, exception: Optional[Exception] = None, **kwargs) -> None:
-    """记录错误日志"""
     if exception:
-        logger.error(f"{message}: {exception}", **kwargs)
+        loguru_logger.error(f"{message}: {exception}", **kwargs)
     else:
-        logger.error(message, **kwargs)
+        loguru_logger.error(message, **kwargs)
 
 
 def log_critical(message: str, exception: Optional[Exception] = None, **kwargs) -> None:
-    """记录严重错误日志"""
     if exception:
-        logger.critical(f"{message}: {exception}", **kwargs)
+        loguru_logger.critical(f"{message}: {exception}", **kwargs)
     else:
-        logger.critical(message, **kwargs)
+        loguru_logger.critical(message, **kwargs)
 
 
-# 日志装饰器
 def log_function_call(func):
     """装饰器：记录函数调用"""
     def wrapper(*args, **kwargs):
-        logger.debug(f"调用函数 {func.__name__} with args={args}, kwargs={kwargs}")
+        loguru_logger.debug(f"调用函数 {func.__name__} with args={args}, kwargs={kwargs}")
         try:
             result = func(*args, **kwargs)
-            logger.debug(f"函数 {func.__name__} 返回: {result}")
+            loguru_logger.debug(f"函数 {func.__name__} 返回: {result}")
             return result
         except Exception as e:
-            logger.error(f"函数 {func.__name__} 执行出错: {e}")
+            loguru_logger.error(f"函数 {func.__name__} 执行出错: {e}")
             raise
     return wrapper
 
@@ -115,29 +109,28 @@ def log_function_call(func):
 def log_async_function_call(func):
     """装饰器：记录异步函数调用"""
     async def wrapper(*args, **kwargs):
-        logger.debug(f"调用异步函数 {func.__name__} with args={args}, kwargs={kwargs}")
+        loguru_logger.debug(f"调用异步函数 {func.__name__} with args={args}, kwargs={kwargs}")
         try:
             result = await func(*args, **kwargs)
-            logger.debug(f"异步函数 {func.__name__} 返回: {result}")
+            loguru_logger.debug(f"异步函数 {func.__name__} 返回: {result}")
             return result
         except Exception as e:
-            logger.error(f"异步函数 {func.__name__} 执行出错: {e}")
+            loguru_logger.error(f"异步函数 {func.__name__} 执行出错: {e}")
             raise
     return wrapper
 
 
 class LogContext:
     """日志上下文管理器"""
-    
     def __init__(self, context_name: str, **context_data):
         self.context_name = context_name
         self.context_data = context_data
-        self.logger = logger.bind(context=context_name, **context_data)
-    
+        self.logger = loguru_logger.bind(context=context_name, **context_data)
+
     def __enter__(self):
         self.logger.info(f"进入上下文: {self.context_name}")
         return self.logger
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             self.logger.error(f"上下文 {self.context_name} 执行出错: {exc_val}")
@@ -147,16 +140,15 @@ class LogContext:
 
 class AsyncLogContext:
     """异步日志上下文管理器"""
-    
     def __init__(self, context_name: str, **context_data):
         self.context_name = context_name
         self.context_data = context_data
-        self.logger = logger.bind(context=context_name, **context_data)
-    
+        self.logger = loguru_logger.bind(context=context_name, **context_data)
+
     async def __aenter__(self):
         self.logger.info(f"进入异步上下文: {self.context_name}")
         return self.logger
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             self.logger.error(f"异步上下文 {self.context_name} 执行出错: {exc_val}")
@@ -164,41 +156,35 @@ class AsyncLogContext:
             self.logger.info(f"退出异步上下文: {self.context_name}")
 
 
-# 性能日志记录
 class PerformanceLogger:
     """性能日志记录器"""
-    
     def __init__(self, operation_name: str):
         self.operation_name = operation_name
         self.start_time = None
-        self.logger = logger.bind(operation=operation_name)
-    
+        self.logger = loguru_logger.bind(operation=operation_name)
+
     def start(self):
-        """开始计时"""
         import time
         self.start_time = time.time()
         self.logger.info(f"开始执行操作: {self.operation_name}")
-    
+
     def end(self):
-        """结束计时"""
         if self.start_time is None:
             self.logger.warning(f"操作 {self.operation_name} 未开始计时")
             return
-        
         import time
         duration = time.time() - self.start_time
         self.logger.info(f"操作 {self.operation_name} 完成，耗时: {duration:.2f}秒")
         return duration
-    
+
     def __enter__(self):
         self.start()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.end()
         if exc_type:
             self.logger.error(f"操作 {self.operation_name} 执行出错: {exc_val}")
 
 
-# 模块级别的日志器实例
 module_logger = get_logger(__name__) 

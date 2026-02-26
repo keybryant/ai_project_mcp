@@ -1,44 +1,7 @@
-"""配置模块"""
+"""配置模块 - 仅导出 MCP 使用的配置"""
 
-from .settings import Settings, get_settings
-from .constants import (
-    ProjectStatus,
-    FileStatus,
-    SyncDirection,
-    WorkflowStage,
-    PaymentStatus,
-    NotificationType,
-    LogLevel,
-    MCPConstants,
-    APIConstants,
-    DatabaseConstants,
-    FileConstants,
-    CacheConstants,
-    SyncConstants,
-    NotificationConstants,
-    ErrorConstants,
-    RegexConstants,
-    DefaultValues,
-)
+from .settings import Settings, get_settings, get_settings_with_env
 
-__all__ = [
-    "Settings",
-    "get_settings",
-    "ProjectStatus",
-    "FileStatus",
-    "SyncDirection",
-    "WorkflowStage",
-    "PaymentStatus",
-    "NotificationType",
-    "LogLevel",
-    "MCPConstants",
-    "APIConstants",
-    "DatabaseConstants", 
-    "FileConstants",
-    "CacheConstants",
-    "SyncConstants",
-    "NotificationConstants",
-    "ErrorConstants",
-    "RegexConstants",
-    "DefaultValues",
-] 
+settings = get_settings()
+
+__all__ = ["Settings", "get_settings", "get_settings_with_env", "settings"]
