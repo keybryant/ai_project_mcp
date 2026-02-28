@@ -87,7 +87,7 @@ class ProjectMCPServer:
     def _check_api_key(self) -> Optional[str]:
         """检查API密钥状态，返回错误信息或None"""
         if not self.api_key:
-            return "❌ **未设置API密钥**\n\n请先使用 `set_api_key` 工具设置有效的API密钥。"
+            return "❌ **未设置API密钥**\n\n请在 `.env` 或系统环境变量中配置 `API_KEY`，然后重启 MCP。"
         return None
     
     def _setup_handlers(self):
@@ -98,20 +98,6 @@ class ProjectMCPServer:
         async def handle_list_tools() -> List[Tool]:
             """列出所有可用工具"""
             return [
-                Tool(
-                    name="set_api_key",
-                    description="设置API密钥用于后端API访问",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "api_key": {
-                                "type": "string",
-                                "description": "后端API密钥"
-                            }
-                        },
-                        "required": ["api_key"]
-                    }
-                ),
                 Tool(
                     name="get_api_status",
                     description="获取API连接状态和密钥信息",
@@ -212,10 +198,8 @@ class ProjectMCPServer:
             logger.info(f"调用工具: {name}, 参数: {arguments}")
             
             try:
-                # API密钥相关工具
-                if name == "set_api_key":
-                    return await self._handle_set_api_key(arguments)
-                elif name == "get_api_status":
+                # API状态与项目相关工具
+                if name == "get_api_status":
                     return await self._handle_get_api_status(arguments)
                 elif name == "set_project":
                     return await self._handle_set_project(arguments)
@@ -293,19 +277,6 @@ class ProjectMCPServer:
         }
         return mime_map.get(ext, 'application/octet-stream')
     
-    async def _handle_set_api_key(self, arguments: dict) -> List[TextContent]:
-        """处理设置API密钥"""
-        api_key = arguments["api_key"]
-        
-        if await self._validate_api_key(api_key):
-            self.api_key = api_key
-            self._api.api_key = api_key
-            logger.info("API密钥设置成功")
-            return [TextContent(type="text", text="✅ **API密钥设置成功**\n\n现在可以访问后端API服务。")]
-        else:
-            logger.warning("API密钥验证失败")
-            return [TextContent(type="text", text="❌ **API密钥验证失败**\n\n请检查密钥是否正确或后端服务是否可用。")]
-    
     async def _handle_get_api_status(self, arguments: dict) -> List[TextContent]:
         """处理获取API状态"""
         if not self.api_key:
@@ -313,7 +284,7 @@ class ProjectMCPServer:
                 "📡 **API连接状态**: 未设置\n",
                 f"🌐 **后端地址**: {self.backend_base_url}",
                 "🔑 **API密钥**: 未设置\n",
-                "⚠️ **注意**: 请使用 `set_api_key` 工具设置API密钥以访问后端服务。"
+                "⚠️ **注意**: 请在 `.env` 或系统环境变量中配置 `API_KEY`，然后重启 MCP。"
             ]
         else:
             is_valid = await self._validate_api_key(self.api_key)
@@ -389,7 +360,7 @@ class ProjectMCPServer:
         if not channel:
             return [TextContent(type="text", text="❌ 请提供 channel 参数")]
         if not self.api_key:
-            return [TextContent(type="text", text="❌ 未设置API密钥，请先使用 set_api_key 设置API密钥")]
+            return [TextContent(type="text", text="❌ 未设置API密钥，请先在 `.env` 或系统环境变量中配置 `API_KEY`，然后重启 MCP")]
         project = self._get_project_by_channel(channel)
         if not isinstance(project, dict) or not project:
             return [TextContent(type="text", text=f"❌ 获取项目失败: {project}")]
@@ -453,7 +424,7 @@ class ProjectMCPServer:
         summary = arguments.get("summary", "")
         tags = arguments.get("tags", [])
         if not self.api_key:
-            return [TextContent(type="text", text="❌ 未设置API密钥，请先使用 set_api_key 设置API密钥")]
+            return [TextContent(type="text", text="❌ 未设置API密钥，请先在 `.env` 或系统环境变量中配置 `API_KEY`，然后重启 MCP")]
         upload_results = []
         successful_uploads = 0
         failed_uploads = 0
@@ -543,7 +514,7 @@ class ProjectMCPServer:
         except (FileNotFoundError, ValueError) as e:
             return [TextContent(type="text", text=f"❌ {e}")]
         if not self.api_key:
-            return [TextContent(type="text", text="❌ 未设置API密钥，请先使用 set_api_key 设置API密钥")]
+            return [TextContent(type="text", text="❌ 未设置API密钥，请先在 `.env` 或系统环境变量中配置 `API_KEY`，然后重启 MCP")]
         task_id = arguments.get("taskId")
         task_result = arguments.get("taskResult", "")
         if task_id is None or task_id == "":

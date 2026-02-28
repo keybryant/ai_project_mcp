@@ -16,10 +16,33 @@ logger = get_logger(__name__)
 
 
 def _get_ws_url() -> str:
-    """从配置得到 WebSocket 地址：ws://<后端地址>/ws/ai-tool。"""
+    """
+    从配置得到 WebSocket 地址：
+
+    最终形态为：
+        ws://<服务器域名或IP>:<端口>/ws/ai-tool?api_key=<你的API_KEY>&name=<cursor_ws_name>
+    """
     cfg = get_settings()
+    api_key = (getattr(cfg, "api_key", None) or "").strip()
+    name = (getattr(cfg, "cursor_ws_name", None) or "cursor").strip()
+
+    def _append_params(u: str) -> str:
+        """在 URL 后追加 api_key 和 name 参数。"""
+        params = []
+        if api_key and "api_key=" not in u:
+            params.append(f"api_key={api_key}")
+        if name and "name=" not in u:
+            params.append(f"name={name}")
+        if not params:
+            return u
+        sep = "&" if "?" in u else "?"
+        return f"{u}{sep}{'&'.join(params)}"
+
+    # 若显式配置了完整 WebSocket 地址，则在其基础上补充 api_key、name 参数
     if cfg.cursor_ws_url and cfg.cursor_ws_url.strip():
-        return cfg.cursor_ws_url.strip()
+        return _append_params(cfg.cursor_ws_url.strip())
+
+    # 否则根据后端地址拼接
     base = (cfg.cursor_backend_address or "").strip()
     if not base:
         return ""
@@ -29,7 +52,9 @@ def _get_ws_url() -> str:
         base = base[8:]
     if not base.startswith("ws://") and not base.startswith("wss://"):
         base = "ws://" + base
-    return base.rstrip("/") + "/ws/ai-tool"
+
+    url = base.rstrip("/") + "/ws/ai-tool"
+    return _append_params(url)
 
 
 async def _run_sync(fn, *args, **kwargs) -> Any:

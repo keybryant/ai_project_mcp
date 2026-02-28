@@ -79,7 +79,8 @@ def create_folder(
 ) -> dict[str, Any]:
     """
     创建文件夹（含多级）。路径可为绝对或相对 project_root。
-    若传入 project_id，创建成功后在目录下建 .project 子目录并写入 project.json。
+    若文件夹已存在则直接返回 ok；若不存在则创建。
+    若传入 project_id 且本次为新建目录，则在目录下建 .project 子目录并写入 project.json。
     """
     logger = _get_logger()
     try:
@@ -87,8 +88,14 @@ def create_folder(
         p = Path(path)
         if not p.is_absolute():
             p = root / p
-        p.mkdir(parents=True, exist_ok=True)
         resolved = str(p.resolve())
+
+        # 已存在且为目录：直接返回 ok，不重复创建、不覆盖 .project
+        if p.exists() and p.is_dir():
+            return {"ok": True, "path": resolved}
+
+        # 不存在则创建（含多级）
+        p.mkdir(parents=True)
 
         if project_id is not None and project_id != "":
             dot_project = p / ".project"
