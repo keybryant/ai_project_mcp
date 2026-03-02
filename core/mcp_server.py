@@ -1,4 +1,5 @@
 """MCP 服务器核心：工具注册与请求分发，具体后端调用由 BackendClient 完成"""
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -390,23 +391,44 @@ class ProjectMCPServer:
             logger.info("MCP 服务器初始化完成")
 
     async def run(self) -> None:
-        """运行 MCP 服务器"""
+        """运行 MCP 服务器。当 Cursor 关闭连接（stdio EOF）时，会结束 server.run()，主进程随之在 finally 里断开 WebSocket。"""
         await self.initialize()
         logger.info("🚀 启动项目管理 MCP 服务器")
         logger.info("📡 等待客户端连接...")
         async with stdio_server() as (read_stream, write_stream):
-            await self.server.run(
-                read_stream,
-                write_stream,
-                InitializationOptions(
-                    server_name="project-management-mcp",
-                    server_version="1.0.0",
-                    capabilities=self.server.get_capabilities(
-                        notification_options=NotificationOptions(),
-                        experimental_capabilities={},
-                    ),
+            init_opts = InitializationOptions(
+                server_name="project-management-mcp",
+                server_version="1.0.0",
+                capabilities=self.server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
                 ),
             )
+            server_task = asyncio.create_task(
+                self.server.run(read_stream, write_stream, init_opts)
+            )
+            watcher_interval = 3.0
+
+            async def _stdio_watcher() -> None:
+                """当 Cursor 关闭连接导致 read_stream EOF 时，取消 server 任务，使主流程退出并断开 WebSocket。"""
+                while not server_task.done():
+                    await asyncio.sleep(watcher_interval)
+                    if getattr(read_stream, "at_eof", lambda: False)():
+                        logger.info("检测到 MCP 客户端已断开（stdio EOF），即将停止并断开 WebSocket")
+                        server_task.cancel()
+                        break
+
+            watcher_task = asyncio.create_task(_stdio_watcher())
+            try:
+                await server_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                watcher_task.cancel()
+                try:
+                    await watcher_task
+                except asyncio.CancelledError:
+                    pass
 
 
 
@@ -519,19 +541,16 @@ class ProjectMCPServer:
         task_result = arguments.get("taskResult", "")
         if task_id is None or task_id == "":
             return [TextContent(type="text", text="❌ 参数 taskId 不能为空")]
+        # taskId 为字符串类型，直接传给后端
+        task_id_str = str(task_id) if not isinstance(task_id, str) else task_id
         try:
-            task_id_val = int(task_id) if isinstance(task_id, str) and task_id.isdigit() else task_id
-            if not isinstance(task_id_val, int):
-                return [TextContent(type="text", text="❌ taskId 必须为有效数字")]
             endpoint = f"projects/{project_id}/ai-dev/task-result"
-            data = {"taskId": task_id_val, "taskResult": task_result or ""}
+            data = {"taskId": task_id_str, "taskResult": task_result or ""}
             result = await self._call_backend_api("POST", endpoint, data=data)
             if result is not None:
-                logger.info(f"任务结果已发送: taskId={task_id_val}, projectId={project_id}")
-                return [TextContent(type="text", text=f"✅ 任务执行结果已提交到系统\n- 任务ID: {task_id_val}\n- 结果已由引擎处理，将根据结果决定下一步（验收/完成/用户验收）")]
+                logger.info(f"任务结果已发送: taskId={task_id_str}, projectId={project_id}")
+                return [TextContent(type="text", text=f"✅ 任务执行结果已提交到系统\n- 任务ID: {task_id_str}\n- 结果已由引擎处理，将根据结果决定下一步（验收/完成/用户验收）")]
             return [TextContent(type="text", text="❌ 提交任务结果失败，请检查API密钥与网络或查看日志")]
-        except ValueError:
-            return [TextContent(type="text", text="❌ taskId 必须为有效数字")]
         except Exception as e:
             logger.error(f"发送任务结果失败: {e}")
             return [TextContent(type="text", text=f"❌ 发送任务结果失败: {str(e)}")]
