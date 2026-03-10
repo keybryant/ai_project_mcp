@@ -54,20 +54,24 @@ class ProjectMCPServer:
 
     def _load_project_json(self, project_root: Optional[str] = None) -> Dict[str, str]:
         """
-        从项目根目录下的 .project/project.json 读取当前项目（projectId, projectName）。
+        从项目根目录下的 .project/project.json 读取当前项目。
+        projectCode 固定为项目根目录的文件夹名；projectName 从 project.json 读取。
         project_root 不传时使用 default_workspace。读取不到或格式无效时抛出异常。
         """
+        root = project_root or self.default_workspace
         path = self._get_project_file_path(project_root)
         if not path.exists():
             raise FileNotFoundError(
-                f"项目根目录下未找到 .project/project.json（路径: {path}），请先创建该文件并填写 projectId 和 projectName，或传入 workspace_path 指定项目根目录。"
+                f"项目根目录下未找到 .project/project.json（路径: {path}），请先创建该文件并填写 projectName，或使用 set_project 工具，或传入 workspace_path 指定项目根目录。"
             )
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if not isinstance(data, dict) or not data.get("projectId"):
-            raise ValueError("project.json 必须包含 projectId 字段。")
+        if not isinstance(data, dict):
+            raise ValueError("project.json 格式无效，必须为 JSON 对象。")
+        # projectCode 从项目根目录文件夹名读取
+        project_code = Path(root).name
         return {
-            "projectId": str(data["projectId"]),
+            "projectCode": project_code,
             "projectName": str(data.get("projectName", "")),
         }
 
@@ -114,7 +118,7 @@ class ProjectMCPServer:
                 ),
                 Tool(
                     name="set_project",
-                    description="根据 Channel 号从后端获取项目信息，并写入项目根目录的 .project/project.json（包含 projectId、projectName），后续操作将从此文件读取当前项目",
+                    description="根据 Channel 号从后端获取项目信息，并写入项目根目录的 .project/project.json（projectName）。projectCode 为项目根目录文件夹名，后续操作自动据此识别项目",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -132,7 +136,7 @@ class ProjectMCPServer:
                 ),
                 Tool(
                     name="upload_documents",
-                    description="上传文档到当前项目：从项目根目录的 .project/project.json 读取 projectId，上传到对应项目",
+                    description="上传文档到当前项目：projectCode 为项目根目录文件夹名，projectName 从 .project/project.json 读取，上传到对应项目",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -205,7 +209,7 @@ class ProjectMCPServer:
                 elif name == "set_project":
                     return await self._handle_set_project(arguments)
 
-                # 以下工具需要从 .project/project.json 读取 projectId（在各自 handler 内读取）
+                # 以下工具需要从 .project/project.json 读取 projectCode（在各自 handler 内读取）
                 # 检查API密钥（某些功能需要后端API）
                 api_key_error = self._check_api_key()
                 use_backend = self.api_key is not None
@@ -306,7 +310,7 @@ class ProjectMCPServer:
             project_data = self._load_project_json(project_root)
             status_lines.append("📋 **当前项目**: ✅\n")
             status_lines.append(f"📝 **项目名称**: {project_data.get('projectName', '')}")
-            status_lines.append(f"📌 **项目ID**: {project_data.get('projectId', '')}")
+            status_lines.append(f"📌 **项目Code**: {project_data.get('projectCode', '')}")
             status_lines.append(f"📁 **项目根目录**: {project_root}")
         except (FileNotFoundError, ValueError):
             status_lines.append("📋 **当前项目**: 未设置（项目根目录下 .project/project.json 不存在或无效）\n")
@@ -356,7 +360,7 @@ class ProjectMCPServer:
             return False
     
     async def _handle_set_project(self, arguments: dict) -> List[TextContent]:
-        """根据 Channel 获取项目并写入项目根目录的 .project/project.json"""
+        """根据 Channel 获取项目并写入项目根目录的 .project/project.json。projectCode 为项目根目录文件夹名。"""
         channel = arguments.get("channel", "")
         if not channel:
             return [TextContent(type="text", text="❌ 请提供 channel 参数")]
@@ -365,18 +369,17 @@ class ProjectMCPServer:
         project = self._get_project_by_channel(channel)
         if not isinstance(project, dict) or not project:
             return [TextContent(type="text", text=f"❌ 获取项目失败: {project}")]
-        project_id = str(project.get("id", ""))
         project_name = str(project.get("name", ""))
-        if not project_id:
-            return [TextContent(type="text", text="❌ 项目数据缺少 id")]
         project_root = self._get_project_root(arguments)
+        # projectCode 从项目根目录文件夹名读取
+        project_code = Path(project_root).name
         path = self._get_project_file_path(project_root)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"projectId": project_id, "projectName": project_name}, f, ensure_ascii=False, indent=2)
+            json.dump({"projectName": project_name}, f, ensure_ascii=False, indent=2)
         self._ensure_project_info_file(project, project_root)
-        logger.info(f"已写入当前项目配置: {path} -> {project_name} ({project_id})")
-        return [TextContent(type="text", text=f"✅ **已设置当前项目**\n📝 **项目名称**: {project_name}\n📌 **项目ID**: {project_id}\n📁 **项目根目录**: {project_root}\n📄 **配置已写入**: {path}")]
+        logger.info(f"已写入当前项目配置: {path} -> {project_name} (projectCode={project_code})")
+        return [TextContent(type="text", text=f"✅ **已设置当前项目**\n📝 **项目名称**: {project_name}\n📌 **项目Code**: {project_code}（根目录文件夹名）\n📁 **项目根目录**: {project_root}\n📄 **配置已写入**: {path}")]
     
     def _get_project_by_channel(self, channel_no: str) -> Any:
         """根据 Channel 号获取项目（委托给 BackendClient）"""
@@ -437,7 +440,7 @@ class ProjectMCPServer:
         project_root = self._get_project_root(arguments)
         try:
             project_data = self._load_project_json(project_root)
-            project_id = project_data["projectId"]
+            project_code = project_data["projectCode"]
             project_name = project_data.get("projectName", "")
         except (FileNotFoundError, ValueError) as e:
             return [TextContent(type="text", text=f"❌ {e}")]
@@ -453,7 +456,7 @@ class ProjectMCPServer:
         for file_path in file_paths:
             try:
                 result = await self._upload_single_document(
-                    file_path, document_type, summary, tags, project_id, project_root
+                    file_path, document_type, summary, tags, project_code, project_root
                 )
                 upload_results.append(result)
                 if "✅" in result:
@@ -480,7 +483,7 @@ class ProjectMCPServer:
         return [TextContent(type="text", text="\n".join(summary_lines))]
     
     async def _upload_single_document(self, file_path: str, document_type: str,
-                                    summary: str, tags: List[str], project_id: str, project_root: str) -> str:
+                                    summary: str, tags: List[str], project_code: str, project_root: str) -> str:
         """上传单个文档。相对路径相对于 project_root。"""
         try:
             if not os.path.isabs(file_path):
@@ -497,7 +500,7 @@ class ProjectMCPServer:
             with open(file_path, "rb") as f:
                 file_content = f.read()
             form.add_field("file", file_content, filename=file_name, content_type=self._get_mime_type(file_name))
-            form.add_field("projectId", str(project_id))
+            form.add_field("projectCode", str(project_code))
             form.add_field("documentTitle", title)
             form.add_field("documentType", document_type)
             form.add_field("accessLevel", "CONFIDENTIAL")
@@ -507,7 +510,7 @@ class ProjectMCPServer:
                 form.add_field("tags", tag)
             url = f"{self.backend_base_url}/document-files/upload-and-create"
             headers = {"X-API-Key": self.api_key} if self.api_key else {}
-            logger.info(f"开始上传文档: {file_name} 到项目 {project_id}")
+            logger.info(f"开始上传文档: {file_name} 到项目 {project_code}")
             async with self._api._session.post(url, data=form, headers=headers) as response:
                 response_text = await response.text()
                 
@@ -528,11 +531,11 @@ class ProjectMCPServer:
             return f"❌ 上传异常: `{os.path.basename(file_path)}` - {str(e)}"
 
     async def _handle_send_result(self, arguments: dict) -> List[TextContent]:
-        """发送任务执行结果到系统。调用后端 /api/projects/{projectId}/ai-dev/task-result"""
+        """发送任务执行结果到系统。调用后端 /api/projects/{projectCode}/ai-dev/task-result"""
         project_root = self._get_project_root(arguments)
         try:
             project_data = self._load_project_json(project_root)
-            project_id = project_data["projectId"]
+            project_code = project_data["projectCode"]
         except (FileNotFoundError, ValueError) as e:
             return [TextContent(type="text", text=f"❌ {e}")]
         if not self.api_key:
@@ -544,11 +547,11 @@ class ProjectMCPServer:
         # taskId 为字符串类型，直接传给后端
         task_id_str = str(task_id) if not isinstance(task_id, str) else task_id
         try:
-            endpoint = f"projects/{project_id}/ai-dev/task-result"
+            endpoint = f"projects/{project_code}/ai-dev/task-result"
             data = {"taskId": task_id_str, "taskResult": task_result or ""}
             result = await self._call_backend_api("POST", endpoint, data=data)
             if result is not None:
-                logger.info(f"任务结果已发送: taskId={task_id_str}, projectId={project_id}")
+                logger.info(f"任务结果已发送: taskId={task_id_str}, projectCode={project_code}")
                 return [TextContent(type="text", text=f"✅ 任务执行结果已提交到系统\n- 任务ID: {task_id_str}\n- 结果已由引擎处理，将根据结果决定下一步（验收/完成/用户验收）")]
             return [TextContent(type="text", text="❌ 提交任务结果失败，请检查API密钥与网络或查看日志")]
         except Exception as e:
